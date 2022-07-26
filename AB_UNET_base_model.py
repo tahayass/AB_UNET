@@ -1,13 +1,15 @@
 import torch
 import sys
+from PIL import Image
+import numpy as np
 import torch.nn as nn
 import torchvision.transforms.functional as TF
 from torch.utils.tensorboard import SummaryWriter
-# default `log_dir` is "runs" - we'll be more specific here
+# default `log_dir` is "runs" 
 writer = SummaryWriter('runs/AB-UNET')
 
 class DoubleConv(nn.Module):
-    def __init__(self, in_channels, out_channels,dropout=0.5):
+    def __init__(self, in_channels, out_channels,dropout=0.01):
         super(DoubleConv, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=False),
@@ -25,7 +27,7 @@ class DoubleConv(nn.Module):
 
 class AB_UNET(nn.Module):
     def __init__(
-            self, in_channels=3, out_channels=1, features=[64, 128, 256, 512],max_dropout=0.5
+            self, in_channels=3, out_channels=1, features=[64, 128, 256, 512],max_dropout=0.01
     ):
         super(AB_UNET, self).__init__()
         self.ups = nn.ModuleList()
@@ -49,6 +51,7 @@ class AB_UNET(nn.Module):
 
         self.bottleneck = DoubleConv(features[-1], features[-1]*2)
         self.final_conv = nn.Conv2d(features[0], out_channels, kernel_size=1)
+        #self.softmax = nn.Softmax2d()
         #softmax will be applied implicitly in the nn.CrossEntropyLoss() module
 
     def forward(self, x):
@@ -77,15 +80,39 @@ class AB_UNET(nn.Module):
         return self.final_conv(x)
 
 def test():
-    x = torch.randn((3, 1, 16, 16))
-    model = AB_UNET(in_channels=1, out_channels=50)
-    preds = model(x)
-    writer.add_graph(model, x)
-    writer.close()
-    sys.exit()
+    #x = torch.randn((3, 3, 16, 16))
+    model = AB_UNET(in_channels=3, out_channels=3)
+    model=model.float()
+    import os
+    from DataLoader import stack_mask
+    image_dir=r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\images"
+    mask_dir=r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\masks"
+    images = os.listdir(image_dir)
+    mask=stack_mask(mask_dir,images,0)
+    img_path = os.path.join(image_dir, images[0])
+    image = np.array(Image.open(img_path).convert("RGB"))
+    img_t=np.moveaxis(image,-1,0)
+    x=torch.from_numpy(img_t).unsqueeze(0)
+    y=torch.from_numpy(mask).unsqueeze(0)
+    print(x.shape)
+    print(y.shape)
+    model.eval()
+    for m in model.modules():
+        if m.__class__.__name__.startswith('Dropout'):
+            m.train()
+    preds = model(x.float())
+    preds2 = model(x.float())
+    print((preds==preds2).any())
+
+
+    #writer.add_graph(model, x)
+    #writer.close()
+    #sys.exit()
     #assert preds.shape == x.shape
     print(x.shape)
     print(preds.shape)
+    print(y.shape)
+    #print(preds[0][0]+preds[0][1]+preds[0][2])
 
 if __name__ == "__main__":
     test()

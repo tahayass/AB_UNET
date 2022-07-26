@@ -4,6 +4,28 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import torchvision
 import numpy as np
+import torch
+
+def stack_mask(mask_dir,images,idx):
+    cls_list=[]
+    for cls in os.listdir(mask_dir):
+        cls_list.append(cls.replace("GT_",""))
+    stack=[]
+    for c in cls_list:
+        mask_path = os.path.join(os.path.join(mask_dir,"GT_"+c), images[idx].replace(".BMP", " "+c+"_mask.bmp"))
+        label=Image.open(mask_path).convert("L").resize((300,300),resample=Image.NEAREST)
+        label=np.asarray(label)/255
+        stack.append(label)
+    mask=np.zeros((300,300))
+    total=np.zeros((300,300))
+    for arr in stack:
+        total+=arr
+    background=(total==mask)*1
+
+    stack.append(background)
+    labels=np.stack(stack,axis=0)
+    return labels
+
 
 class BlastocystDataset(Dataset):
     def __init__(self, image_dir, mask_dir, transform=None):
@@ -17,10 +39,9 @@ class BlastocystDataset(Dataset):
 
     def __getitem__(self, index):
         img_path = os.path.join(self.image_dir, self.images[index])
-        mask_path = os.path.join(self.mask_dir, self.images[index].replace(".jpg", "_mask.gif"))
-        image = np.array(Image.open(img_path).convert("RGB"))
-        mask = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
-        mask[mask == 255.0] = 1.0
+        image = np.array(Image.open(img_path).convert("RGB").resize((300,300),resample=Image.NEAREST))
+        #image= np.moveaxis(image,-1,0)
+        mask = stack_mask(self.mask_dir,self.images,index).astype(dtype=np.float32)
 
         if self.transform is not None:
             augmentations = self.transform(image=image, mask=mask)
@@ -29,43 +50,3 @@ class BlastocystDataset(Dataset):
 
         return image, mask
 
-def get_loaders(
-    train_dir,
-    train_maskdir,
-    val_dir,
-    val_maskdir,
-    batch_size,
-    train_transform,
-    val_transform,
-    num_workers=4,
-    pin_memory=True):
-
-    train_ds = BlastocystDataset(
-        image_dir=train_dir,
-        mask_dir=train_maskdir,
-        transform=train_transform,
-    )
-
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        shuffle=True,
-    )
-
-    val_ds = BlastocystDataset(
-        image_dir=val_dir,
-        mask_dir=val_maskdir,
-        transform=val_transform,
-    )
-
-    val_loader = DataLoader(
-        val_ds,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        shuffle=False,
-    )
-
-    return train_loader, val_loader
