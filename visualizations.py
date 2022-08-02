@@ -9,12 +9,9 @@ import cv2
 
 
 
-
-
-
-def visualise_masks(test_dir,model):
+def visualise_masks(test_dir,output_folder,model):
     images=os.listdir(test_dir)
-    folder=r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\test_img_output"
+    
     colors=np.array([[255,0,0],[0,255,0],[0,0,255]])
     for im in images:
         img_path=os.path.join(test_dir,im)
@@ -30,7 +27,18 @@ def visualise_masks(test_dir,model):
 
         masked_img=cv2.addWeighted(np.asarray(original_img,np.uint8), 0.6, np.asarray(image,np.uint8), 0.4,0)
         name=im.replace(".BMP","")
-        cv2.imwrite(f"{folder}\{name}_masked.png",masked_img)
+        cv2.imwrite(f"{output_folder}\{name}_masked.png",masked_img)
+
+def main():
+    test_dir=r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\test_images"
+    model=torch.load(r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\model.pth")
+    out=r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\test_img_output"
+    visualise_masks(test_dir,out,model)
+
+
+if __name__ == "__main__":
+    main()
+
 
 
 

@@ -28,7 +28,7 @@ def stack_mask(mask_dir,images,idx):
 
 
 class BlastocystDataset(Dataset):
-    def __init__(self, image_dir, mask_dir, transform=None):
+    def __init__(self, image_dir, mask_dir, transform=None): #change to accept list of images instead of folder names (way faster than creating new folders and actually moving files)
         self.image_dir = image_dir
         self.mask_dir = mask_dir
         self.transform = transform
