@@ -80,9 +80,11 @@ class AB_UNET(nn.Module):
         return self.final_conv(x)
 
 def test():
-    #x = torch.randn((3, 3, 16, 16))
-    model = AB_UNET(in_channels=3, out_channels=3)
+    x = torch.randn((3, 3, 16, 16))
+    model = AB_UNET(in_channels=3, out_channels=4)
     model=model.float()
+    y=model(x)
+    print(y.shape)
     #writer.add_graph(model, x)
     #writer.close()
     #sys.exit()

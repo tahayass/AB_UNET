@@ -51,7 +51,7 @@ def save_model_dict(model,step):
 
 def random_sampling(num=10):
 
-    num_images=len(os.listdir(r'C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\images'))
+    
     LEARNING_RATE = 1e-3
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     #DEVICE="cpu"
@@ -70,7 +70,8 @@ def random_sampling(num=10):
     BASE_DIR=r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA"
     TRAIN_DIR=r"Labeled_pool"
     VAL_DIR=r"Unlabeled_pool"
-    train_val_split(BASE_DIR,TRAIN_DIR,VAL_DIR,split_ratio=0.2,shuffle=False)
+    train_val_split(BASE_DIR,TRAIN_DIR,VAL_DIR,split_ratio=0.4,shuffle=False)
+    num_images=len(os.listdir(r'C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Unlabeled_pool\val_images'))
 
 
 #model init    
