@@ -48,5 +48,5 @@ class BlastocystDataset(Dataset):
             image = augmentations["image"]
             mask = augmentations["mask"]
 
-        return image, mask #add image name to keep track of scores
+        return image, mask, self.images[index] #add image name to keep track of scores
 

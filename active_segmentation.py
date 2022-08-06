@@ -117,7 +117,7 @@ def random_sampling(num=10):
         move_images(BASE_DIR,TRAIN_DIR,VAL_DIR,num)
 
 
-    dice_stats=np.array(dice_array)
+    dice_stats=np.array(dice_array.to(DEVICE)).to(DEVICE)
     plt.plot(dice_stats,np.arange(1,int(num_images/num),1))
     plt.show()
         

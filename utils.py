@@ -1,3 +1,4 @@
+from typing import Dict
 import torch
 import torch.nn as nn
 from PIL import Image
@@ -9,6 +10,10 @@ from torch.utils.data import DataLoader
 import torchvision
 import random
 import shutil
+from tqdm import tqdm
+
+from acquisition_functions import score_entropy
+
 
 
 #Outputs the resulting masks after softmax operation
@@ -78,11 +83,10 @@ def check_accuracy(loader, model,batch_size, device="cuda"):
     model.eval()
 
     with torch.no_grad():
-        for x, y in loader:
+        for x, y , _ in loader:
             x = x.float().to(device)
             y = y.float().to(device).unsqueeze(1)
             preds = output_masks(model(x)).float().to(device)
-            
             num_correct += (preds == y).sum()
             num_pixels += torch.numel(preds)*batch_size
             dice_score += (2 * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
@@ -158,5 +162,73 @@ def train_val_split(BASE_DIR,TRAIN_DIR,VAL_DIR,split_ratio=0.8,shuffle=False):
             if os.path.exists(target_mask_path)==False:
                 os.mkdir(target_mask_path)
             shutil.copy(mask_path, target_mask_path)
+
+
+def stochastic_prediction(model,batch,dropout_iteration,device):
+
+    model.eval().float().to(device)
+    for m in model.modules():
+        if m.__class__.__name__.startswith('Dropout'):
+            m.train().to(device)
+    #batch.detach()
+    x=torch.zeros((batch.shape[0],4,batch.shape[2],batch.shape[3])).to(device)
+    softmax=nn.Softmax(dim=1)
+    with torch.no_grad():
+        for i in range(dropout_iteration):
+            x += softmax(model(batch))
+        x /= dropout_iteration
+    del batch
+    torch.cuda.empty_cache()
+
+
+    return x
+
+
+def standard_prediction(model,batch,device):
+
+    model.float().eval().to(device)
+    batch.detach()
+    softmax=nn.Softmax(dim=1)
+    return softmax(model(batch))
+
+
+def create_score_dict(model,loader,device,acquisition_type,dropout_iteration):
+    
+    score_dict=dict()
+    #model= model.float().to(device)
+    if acquisition_type==1 :
+        print("Calculating entropy scores .. \n ")
+        for batch_idx, (data, _, image_name) in tqdm(enumerate(loader)):
+            #model = torch.load('model.pth')
+            data = data.float().to(device)
+            st_pred=stochastic_prediction(model,data,dropout_iteration,device)
+            with torch.no_grad():
+                scores=score_entropy(st_pred.cpu().numpy())
+                for name,score in zip(image_name,torch.from_numpy(scores).to(device)):
+                    score_dict[name]=score.item()
+            data.detach()
+            del data
+            torch.cuda.empty_cache()
+        score_dict=dict(sorted(score_dict.items(), key=lambda item: item[1],reverse=True))
+
+        return score_dict
+
+
+
+            
+
+
+
+
+
+
+
+    
+
+
+    
+    
+
+    
 
 

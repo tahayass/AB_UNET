@@ -24,7 +24,7 @@ LEARNING_RATE = 1e-4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 #DEVICE="cpu"
 BATCH_SIZE = 2
-NUM_EPOCHS = 2
+NUM_EPOCHS = 12
 NUM_WORKERS = 1
 IMAGE_HEIGHT = 160  # 1280 originally
 IMAGE_WIDTH = 240  # 1918 originally
@@ -38,7 +38,7 @@ VAL_MASK_DIR = r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\VAL\va
 def train_fn(loader, model, optimizer, loss_fn, scaler):
     loop = tqdm(loader)
 
-    for batch_idx, (data, targets) in enumerate(loop):
+    for batch_idx, (data, targets, _) in enumerate(loop):
         data = data.float().to(device=DEVICE)
         targets = targets.float().to(device=DEVICE)
 
@@ -66,12 +66,13 @@ def main():
             #A.HorizontalFlip(p=0.3),
             #A.VerticalFlip(p=0.1),
             #A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
+            A.augmentations.transforms.Equalize(mode="cv",p=1),
             ToTensorV2()
         ],
     )
 
 
-    model = AB_UNET(in_channels=3, out_channels=4).to(DEVICE)
+    model = AB_UNET(in_channels=3, out_channels=4,max_dropout=0.1,dropout=0.01).to(DEVICE)
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     train_loader,val_loader= get_loaders(

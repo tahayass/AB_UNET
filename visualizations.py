@@ -10,8 +10,8 @@ import cv2
 
 
 def visualise_masks(test_dir,output_folder,model):
+
     images=os.listdir(test_dir)
-    
     colors=np.array([[255,0,0],[0,255,0],[0,0,255]])
     for im in images:
         img_path=os.path.join(test_dir,im)
