@@ -12,7 +12,7 @@ import random
 import shutil
 from tqdm import tqdm
 
-from acquisition_functions import score_entropy
+from acquisition_functions import score_entropy, score_js_score, score_kl_divergence
 
 
 
@@ -73,6 +73,58 @@ def get_loaders(
     )
     return train_loader,val_loader
 
+def get_loaders_active(
+    labeled_dir,
+    labeled_maskdir,
+    unlabeled_dir,
+    unlabeled_maskdir,
+    test_dir,
+    test_maskdir,
+    batch_size,
+    train_transform,
+    val_transform,
+    num_workers=4,
+    pin_memory=True,
+):
+    labeled_ds = BlastocystDataset(
+        image_dir=labeled_dir,
+        mask_dir=labeled_maskdir,
+        transform=train_transform,
+    )
+
+    labeled_loader = DataLoader(
+        labeled_ds,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        shuffle=True,
+    )
+    unlabeled_ds = BlastocystDataset(
+        image_dir=unlabeled_dir,
+        mask_dir=unlabeled_maskdir,
+        transform=val_transform,
+    )
+    unlabeled_loader = DataLoader(
+        unlabeled_ds,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        shuffle=False,
+    )
+    test_ds = BlastocystDataset(
+        image_dir=test_dir,
+        mask_dir=test_maskdir,
+        transform=val_transform,
+    )
+    test_loader = DataLoader(
+        test_ds,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        shuffle=False,
+    )
+    return labeled_loader,unlabeled_loader,test_loader
+
 
 #checks accuarcy after each training iteration
 def check_accuracy(loader, model,batch_size, device="cuda"):
@@ -91,10 +143,27 @@ def check_accuracy(loader, model,batch_size, device="cuda"):
             num_pixels += torch.numel(preds)*batch_size
             dice_score += (2 * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
 
-    print(f"accuqrcy :{num_correct/num_pixels*100:.2f}")
+    print(f"accuracy :{num_correct/num_pixels*100:.2f}")
     print(f"Dice score: {dice_score/len(loader)}")
     model.train()
     return num_correct/num_pixels*100,dice_score/len(loader)
+
+def check_accuracy_batch(x,y,model,batch_size, device="cuda"):
+    num_correct = 0
+    num_pixels = 0
+    dice_score = 0
+    model=model.float()
+    model.eval()
+
+    with torch.no_grad():
+        x = x.float().to(device)
+        y = y.float().to(device).unsqueeze(1)
+        preds = output_masks(model(x)).float().to(device)
+        num_correct = (preds == y).sum()
+        num_pixels = torch.numel(preds)*batch_size
+        dice_score = (2 * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
+    model.train()
+    return num_correct/num_pixels*100,dice_score
 
 
 
@@ -134,7 +203,7 @@ def train_val_split(BASE_DIR,TRAIN_DIR,VAL_DIR,split_ratio=0.8,shuffle=False):
     images=os.listdir(os.path.join(BASE_DIR,'images'))
 
     if shuffle : 
-        images=random.shuffle(images)
+        random.shuffle(images)
 
     train_split=images[:int(len(images)*split_ratio)]
     val_split=images[int(len(images)*split_ratio):]
@@ -159,6 +228,67 @@ def train_val_split(BASE_DIR,TRAIN_DIR,VAL_DIR,split_ratio=0.8,shuffle=False):
         for mask in os.listdir(os.path.join(BASE_DIR,'masks')):
             mask_path=os.path.join(os.path.join(BASE_DIR,'masks',mask),im.replace(".BMP"," "+mask.replace("GT_","")+"_Mask.bmp"))
             target_mask_path=os.path.join(BASE_DIR,VAL_DIR,'val_masks',mask)
+            if os.path.exists(target_mask_path)==False:
+                os.mkdir(target_mask_path)
+            shutil.copy(mask_path, target_mask_path)
+
+def labeled_unlabeled_test_split(BASE_DIR,LABELED_DIR,UNLABELED_DIR,TEST_DIR,label_split_ratio=0.1,test_split_ratio=0.3,shuffle=False):
+
+    os.mkdir(os.path.join(BASE_DIR,LABELED_DIR))
+    os.mkdir(os.path.join(BASE_DIR,UNLABELED_DIR))
+    os.mkdir(os.path.join(BASE_DIR,TEST_DIR))
+    os.mkdir(os.path.join(BASE_DIR,LABELED_DIR,'labeled_images'))
+    os.mkdir(os.path.join(BASE_DIR,UNLABELED_DIR,'unlabeled_images'))
+    os.mkdir(os.path.join(BASE_DIR,LABELED_DIR,'labeled_masks'))
+    os.mkdir(os.path.join(BASE_DIR,UNLABELED_DIR,'unlabeled_masks'))
+    os.mkdir(os.path.join(BASE_DIR,TEST_DIR,'test_images'))
+    os.mkdir(os.path.join(BASE_DIR,TEST_DIR,'test_masks'))
+
+    for mask in os.listdir(os.path.join(BASE_DIR,'masks')):
+        os.mkdir(os.path.join(BASE_DIR,LABELED_DIR,'labeled_masks',mask))
+        os.mkdir(os.path.join(BASE_DIR,UNLABELED_DIR,'unlabeled_masks',mask))
+        os.mkdir(os.path.join(BASE_DIR,TEST_DIR,'test_masks',mask))
+
+    images=os.listdir(os.path.join(BASE_DIR,'images'))
+
+    if shuffle : 
+        random.shuffle(images)
+    test_split=images[:int(len(images)*test_split_ratio)]
+    labeled_split=images[int(len(images)*test_split_ratio):int(len(images)*(test_split_ratio+label_split_ratio))]
+    unlabeled_split=images[int(len(images)*(test_split_ratio+label_split_ratio)):]
+
+    for im in labeled_split : 
+        im_path=os.path.join(BASE_DIR,'images',im)
+        target_path=os.path.join(BASE_DIR,LABELED_DIR,'labeled_images',im)
+        shutil.copy(im_path, target_path)
+
+        for mask in os.listdir(os.path.join(BASE_DIR,'masks')):
+            mask_path=os.path.join(os.path.join(BASE_DIR,'masks',mask),im.replace(".BMP"," "+mask.replace("GT_","")+"_Mask.bmp"))
+            target_mask_path=os.path.join(BASE_DIR,LABELED_DIR,'labeled_masks',mask)
+            if os.path.exists(target_mask_path)==False:
+                os.mkdir(target_mask_path)
+            shutil.copy(mask_path, target_mask_path)
+            
+    for im in unlabeled_split : 
+        im_path=os.path.join(BASE_DIR,'images',im)
+        target_path=os.path.join(BASE_DIR,UNLABELED_DIR,'unlabeled_images',im)
+        shutil.copy(im_path, target_path)    
+
+        for mask in os.listdir(os.path.join(BASE_DIR,'masks')):
+            mask_path=os.path.join(os.path.join(BASE_DIR,'masks',mask),im.replace(".BMP"," "+mask.replace("GT_","")+"_Mask.bmp"))
+            target_mask_path=os.path.join(BASE_DIR,UNLABELED_DIR,'unlabeled_masks',mask)
+            if os.path.exists(target_mask_path)==False:
+                os.mkdir(target_mask_path)
+            shutil.copy(mask_path, target_mask_path)
+
+    for im in test_split : 
+        im_path=os.path.join(BASE_DIR,'images',im)
+        target_path=os.path.join(BASE_DIR,TEST_DIR,'test_images',im)
+        shutil.copy(im_path, target_path)    
+
+        for mask in os.listdir(os.path.join(BASE_DIR,'masks')):
+            mask_path=os.path.join(os.path.join(BASE_DIR,'masks',mask),im.replace(".BMP"," "+mask.replace("GT_","")+"_Mask.bmp"))
+            target_mask_path=os.path.join(BASE_DIR,TEST_DIR,'test_masks',mask)
             if os.path.exists(target_mask_path)==False:
                 os.mkdir(target_mask_path)
             shutil.copy(mask_path, target_mask_path)
@@ -197,7 +327,7 @@ def create_score_dict(model,loader,device,acquisition_type,dropout_iteration):
     score_dict=dict()
     #model= model.float().to(device)
     if acquisition_type==1 :
-        print("Calculating entropy scores .. \n ")
+        print("Calculating entropy scores ..")
         for batch_idx, (data, _, image_name) in tqdm(enumerate(loader)):
             #model = torch.load('model.pth')
             data = data.float().to(device)
@@ -210,8 +340,65 @@ def create_score_dict(model,loader,device,acquisition_type,dropout_iteration):
             del data
             torch.cuda.empty_cache()
         score_dict=dict(sorted(score_dict.items(), key=lambda item: item[1],reverse=True))
-
         return score_dict
+
+    elif acquisition_type==2 :
+        print("Calculating BALD scores .. ")
+        for batch_idx, (data, _, image_name) in tqdm(enumerate(loader)):
+            #model = torch.load('model.pth')
+            data = data.float().to(device)
+            stn_prediction=standard_prediction(model,data,device)
+            with torch.no_grad():
+                stn_entropy_score=score_entropy(stn_prediction.cpu().numpy())
+            st_entropy_score=np.zeros(data.shape[0])
+            with torch.no_grad():
+                for i in range(dropout_iteration):
+                    st_entropy_score+=score_entropy(stochastic_prediction(model,data,1,device).cpu().numpy())
+                st_entropy_score /= dropout_iteration
+                scores=stn_entropy_score-st_entropy_score
+                for name,score in zip(image_name,torch.from_numpy(scores).to(device)):
+                    score_dict[name]=score.item()
+            data.detach()
+            del data
+            torch.cuda.empty_cache()
+        score_dict=dict(sorted(score_dict.items(), key=lambda item: item[1],reverse=True))
+        return score_dict
+
+    elif acquisition_type==3 :
+        print("Calculating KL-divergence scores .. ")
+        for batch_idx, (data, _, image_name) in tqdm(enumerate(loader)):
+            #model = torch.load('model.pth')
+            data = data.float().to(device)
+            st_pred=stochastic_prediction(model,data,dropout_iteration,device)
+            stn_prediction=standard_prediction(model,data,device)
+            with torch.no_grad():
+                scores=score_kl_divergence(stn_prediction.cpu().numpy(),st_pred.cpu().numpy())
+                for name,score in zip(image_name,torch.from_numpy(scores).to(device)):
+                    score_dict[name]=score.item()
+            data.detach()
+            del data
+            torch.cuda.empty_cache()
+        score_dict=dict(sorted(score_dict.items(), key=lambda item: item[1],reverse=True))
+        return score_dict
+
+    elif acquisition_type==4 :
+        print("Calculating JS-divergence scores .. ")
+        for batch_idx, (data, _, image_name) in tqdm(enumerate(loader)):
+            #model = torch.load('model.pth')
+            data = data.float().to(device)
+            st_pred=stochastic_prediction(model,data,dropout_iteration,device)
+            stn_prediction=standard_prediction(model,data,device)
+            with torch.no_grad():
+                scores=score_js_score(stn_prediction.cpu().numpy(),st_pred.cpu().numpy())
+                for name,score in zip(image_name,torch.from_numpy(scores).to(device)):
+                    score_dict[name]=score.item()
+            data.detach()
+            del data
+            torch.cuda.empty_cache()
+        score_dict=dict(sorted(score_dict.items(), key=lambda item: item[1],reverse=True))
+        return score_dict
+
+    return score_dict
 
 
 

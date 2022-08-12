@@ -43,12 +43,3 @@ def score_js_score(standard_prediction,stochastic_prediction):
     return js
 
 
-
-def main():
-    a=np.random.rand(1,4,300,300)
-    print(score_entropy(a))
-
-
-
-if __name__ == "__main__":
-    main()
