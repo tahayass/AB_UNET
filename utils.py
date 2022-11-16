@@ -389,6 +389,8 @@ def create_score_dict(model,loader,device,acquisition_type,dropout_iteration):
             st_pred=stochastic_prediction(model,data,dropout_iteration,device)
             stn_prediction=standard_prediction(model,data,device)
             with torch.no_grad():
+                #print((stn_prediction.cpu().numpy()<0).any())
+                #print((st_pred.cpu().numpy()<0).any())
                 scores=score_js_score(stn_prediction.cpu().numpy(),st_pred.cpu().numpy())
                 for name,score in zip(image_name,torch.from_numpy(scores).to(device)):
                     score_dict[name]=score.item()
@@ -396,9 +398,22 @@ def create_score_dict(model,loader,device,acquisition_type,dropout_iteration):
             del data
             torch.cuda.empty_cache()
         score_dict=dict(sorted(score_dict.items(), key=lambda item: item[1],reverse=True))
+        print(score_dict)
         return score_dict
 
     return score_dict
+
+
+def reset_DATA(data_path):
+    dirs=os.listdir(data_path)
+    to_stay=[os.path.join(data_path,"images"),os.path.join(data_path,"masks")]
+    for dir in dirs:
+        dir=os.path.join(data_path,dir)
+        if dir not in to_stay:
+            shutil.rmtree(dir)
+
+
+
 
 
 

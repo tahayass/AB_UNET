@@ -1,0 +1,8 @@
+albumentations==1.2.1
+matplotlib==3.6.0
+numpy==1.23.3
+Pillow==9.2.0
+scipy==1.9.1
+torch==1.12.1
+torchvision==0.13.1
+tqdm==4.64.1

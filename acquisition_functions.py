@@ -37,7 +37,10 @@ def score_js_score(standard_prediction,stochastic_prediction):
     for i in range(stochastic_prediction.shape[0]):
         for j in range(stochastic_prediction.shape[2]):
             for k in range(stochastic_prediction.shape[3]):
-              results[i,j,k]= jensenshannon(standard_prediction[i,:,j,k],stochastic_prediction[i,:,j,k]).sum()
+              results[i,j,k]= jensenshannon(np.array(standard_prediction[i,:,j,k],dtype=np.float64),np.array(stochastic_prediction[i,:,j,k],dtype=np.float64)).sum()
+              if np.isnan(results[i,j,k].sum()): 
+                print(results[i,j,k])
+                print(stochastic_prediction[i,:,j,k],' and ',standard_prediction[i,:,j,k])
     results = results.reshape(results.shape[0], results.shape[1]*results.shape[2])
     js = results.sum(axis = 1)
     return js

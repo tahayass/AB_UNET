@@ -1,0 +1,25 @@
+{
+"experiment name": "test2",
+
+"data":
+  {
+    "label split ratio": 0.1,
+    "test split ratio": 0.3
+  },
+
+"model":
+  {
+    "number of epochs": 5,
+    "batch size": 1
+  },
+
+"active_step":
+  {
+    "sample size" : 10,
+    "dropout" : 0,
+    "max dropout": 0.2,
+    "dropout iterations": 4
+  },
+  
+"comments": ""
+}

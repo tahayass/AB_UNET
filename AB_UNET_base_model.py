@@ -27,7 +27,7 @@ class DoubleConv(nn.Module):
 
 class AB_UNET(nn.Module):
     def __init__(
-            self, in_channels=3, out_channels=1, features=[32, 64, 128, 256],max_dropout=0.05,dropout=0.05
+            self, in_channels=3, out_channels=1, features=[128, 256, 512, 1024],max_dropout=0.05,dropout=0.05
     ):
         super(AB_UNET, self).__init__()
         self.ups = nn.ModuleList()
@@ -37,7 +37,7 @@ class AB_UNET(nn.Module):
 
         # Down part of UNET
         for feature in features:
-            self.downs.append(DoubleConv(in_channels, feature,dropout))
+            self.downs.append(DoubleConv(in_channels,feature,dropout))
             in_channels = feature
 
         # Up part of UNET

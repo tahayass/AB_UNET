@@ -12,7 +12,7 @@ def stack_mask(mask_dir,images,idx):
         cls_list.append(cls.replace("GT_",""))
     stack=[]
     for c in cls_list:
-        mask_path = os.path.join(os.path.join(mask_dir,"GT_"+c), images[idx].replace(".BMP", " "+c+"_mask.bmp"))
+        mask_path = os.path.join(os.path.join(mask_dir,"GT_"+c), images[idx].replace(".BMP", " "+c+"_Mask.bmp"))
         label=Image.open(mask_path).convert("L").resize((200,200),resample=Image.NEAREST)
         label=np.asarray(label)/255
         stack.append(label)
@@ -41,7 +41,10 @@ class BlastocystDataset(Dataset):
         img_path = os.path.join(self.image_dir, self.images[index])
         image = np.array(Image.open(img_path).convert("RGB").resize((200,200),resample=Image.NEAREST))
         #image= np.moveaxis(image,-1,0)
-        mask = stack_mask(self.mask_dir,self.images,index).astype(dtype=np.float32)
+        try:
+            mask = stack_mask(self.mask_dir,self.images,index).astype(dtype=np.float32)
+        except:
+            mask=np.zeros((200,200,3))
 
         if self.transform is not None:
             augmentations = self.transform(image=image, mask=mask)

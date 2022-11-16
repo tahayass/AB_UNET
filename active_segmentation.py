@@ -2,7 +2,7 @@ from itertools import dropwhile
 from turtle import color
 import torch
 import torch.nn as nn
-from utils import train_val_split,get_loaders_active,check_accuracy,create_score_dict,labeled_unlabeled_test_split
+from utils import train_val_split,get_loaders_active,get_loaders,check_accuracy,create_score_dict,labeled_unlabeled_test_split,reset_DATA
 from train import train_fn
 import torch
 import albumentations as A
@@ -70,41 +70,37 @@ def save_model_dict(model,step):
 
 
 
-def random_sampling(sample_size=10):
+def random_sampling(sample_size=10,dropout=0,max_dropout=0.3,label_split_ratio=0.05,test_split_ratio=0.3,num_epochs=5,batch_size=4,exp_path=r""):
 
-    
     LEARNING_RATE = 1e-3
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     #DEVICE="cpu"
-    BATCH_SIZE = 4
-    NUM_EPOCHS = 8
-    NUM_WORKERS = 1
+    BATCH_SIZE = batch_size
+    NUM_EPOCHS = num_epochs
+    NUM_WORKERS = 4
     PIN_MEMORY = False
     LOAD_MODEL = False
-    LABELED_IMG_DIR = r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Labeled_pool\labeled_images"
-    LABELED_MASK_DIR = r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Labeled_pool\labeled_masks"
-    UNLABELED_IMG_DIR = r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Unlabeled_pool\unlabeled_images"
-    UNLABELED_MASK_DIR = r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Unlabeled_pool\unlabeled_masks"
-    TEST_IMG_DIR=r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Test\test_images"
-    TEST_MASK_DIR=r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Test\test_masks"
+    LABELED_IMG_DIR = os.path.join('.','DATA','Labeled_pool','labeled_images')
+    LABELED_MASK_DIR = os.path.join('.','DATA','Labeled_pool','labeled_masks')
+    UNLABELED_IMG_DIR = os.path.join('.','DATA','Unlabeled_pool','unlabeled_images')
+    UNLABELED_MASK_DIR = os.path.join('.','DATA','Unlabeled_pool','unlabeled_masks')
+    TEST_IMG_DIR = os.path.join('.','DATA','Test','test_images')
+    TEST_MASK_DIR = os.path.join('.','DATA','Test','test_masks')
 
 
 #intial split
 
-    BASE_DIR=r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA"
+    BASE_DIR=os.path.join('.','DATA')
     LABELED_DIR=r"Labeled_pool"
     UNLABELED_DIR=r"Unlabeled_pool"
     TEST_DIR=r"Test"
-    labeled_unlabeled_test_split(BASE_DIR,LABELED_DIR,UNLABELED_DIR,TEST_DIR,label_split_ratio=0.05,test_split_ratio=0.3,shuffle=False)
-    num_images=len(os.listdir(r'C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Unlabeled_pool\unlabeled_images'))
+    labeled_unlabeled_test_split(BASE_DIR,LABELED_DIR,UNLABELED_DIR,TEST_DIR,label_split_ratio=label_split_ratio,test_split_ratio=test_split_ratio,shuffle=True)
+    num_images=len(os.listdir(UNLABELED_IMG_DIR))
 
-#model init    
-    model = AB_UNET(in_channels=3, out_channels=4,dropout=0,max_dropout=0.22).to(DEVICE)
+    model = AB_UNET(in_channels=3, out_channels=4,dropout=dropout,max_dropout=max_dropout).to(DEVICE)
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     scaler = torch.cuda.amp.GradScaler()
-    scheduler= torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,mode='min',patience=3,verbose=True)
-    
 
     #torch.cuda.empty_cache()
     train_transform = A.Compose(
@@ -112,13 +108,14 @@ def random_sampling(sample_size=10):
             #A.HorizontalFlip(p=0.3),
             #A.VerticalFlip(p=0.1),
             #A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
+            #A.augmentations.transforms.Equalize(mode="cv",p=1),
             ToTensorV2()
         ],
     )
     dice_array=[]
     for step in range(int(num_images/sample_size)):
+        
         print(f'step number {step} : ')
-
         labeled_loader,_,test_loader= get_loaders_active(
             LABELED_IMG_DIR,
             LABELED_MASK_DIR,
@@ -133,8 +130,8 @@ def random_sampling(sample_size=10):
         )
         
         for epoch in tqdm(range(NUM_EPOCHS)):
-            scheduler= torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,mode='min',patience=3,verbose=True)
-            train_fn(labeled_loader, model, optimizer, loss_fn, scaler,scheduler)
+            #scheduler= torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,mode='min',patience=3,verbose=True)
+            train_fn(labeled_loader, model, optimizer, loss_fn, scaler,scheduler=None)
             if epoch==NUM_EPOCHS-1 : 
                 acc,dice=check_accuracy(test_loader,model,BATCH_SIZE, device=DEVICE)
             #save_model_dict(model,step)
@@ -142,46 +139,49 @@ def random_sampling(sample_size=10):
         dice_array.append(dice)
         #move 10 images at random to labeled pool
         move_images(BASE_DIR,LABELED_DIR,UNLABELED_DIR,sample_size)
+
     dice_stats=torch.tensor(dice_array).detach().cpu().numpy()
-    np.save(r'C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\stats\random_featuresinhalf.npy',dice_stats)
-    plt.plot(np.arange(1,int(num_images/sample_size)+1,1),dice_stats)
-    plt.show()
+    path=os.path.join(exp_path,r"dice_stats",f"random.npy")
+    np.save(path,np.array(dice_stats))
 
 
-def Active_sampling(sample_size=10,acquistion_type=1):
+
+
+
+
+def Active_sampling(sample_size=10,acquistion_type=3,dropout_iteration=5,dropout=0,max_dropout=0.3,label_split_ratio=0.05,test_split_ratio=0.3,num_epochs=5,batch_size=4,exp_path=r""):
 
     LEARNING_RATE = 1e-3
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     #DEVICE="cpu"
-    BATCH_SIZE = 4
-    NUM_EPOCHS = 8
-    NUM_WORKERS = 1
+    BATCH_SIZE = batch_size
+    NUM_EPOCHS = num_epochs
+    NUM_WORKERS = 4
     PIN_MEMORY = False
     LOAD_MODEL = False
-    LABELED_IMG_DIR = r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Labeled_pool\labeled_images"
-    LABELED_MASK_DIR = r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Labeled_pool\labeled_masks"
-    UNLABELED_IMG_DIR = r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Unlabeled_pool\unlabeled_images"
-    UNLABELED_MASK_DIR = r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Unlabeled_pool\unlabeled_masks"
-    TEST_IMG_DIR=r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Test\test_images"
-    TEST_MASK_DIR=r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Test\test_masks"
+    LABELED_IMG_DIR = os.path.join('.','DATA','Labeled_pool','labeled_images')
+    LABELED_MASK_DIR = os.path.join('.','DATA','Labeled_pool','labeled_masks')
+    UNLABELED_IMG_DIR = os.path.join('.','DATA','Unlabeled_pool','unlabeled_images')
+    UNLABELED_MASK_DIR = os.path.join('.','DATA','Unlabeled_pool','unlabeled_masks')
+    TEST_IMG_DIR = os.path.join('.','DATA','Test','test_images')
+    TEST_MASK_DIR = os.path.join('.','DATA','Test','test_masks')
 
 
 #intial split
 
-    BASE_DIR=r"C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA"
+    BASE_DIR=os.path.join('.','DATA')
     LABELED_DIR=r"Labeled_pool"
     UNLABELED_DIR=r"Unlabeled_pool"
     TEST_DIR=r"Test"
-    labeled_unlabeled_test_split(BASE_DIR,LABELED_DIR,UNLABELED_DIR,TEST_DIR,label_split_ratio=0.05,test_split_ratio=0.3,shuffle=False)
-    num_images=len(os.listdir(r'C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\DATA\Unlabeled_pool\unlabeled_images'))
+    labeled_unlabeled_test_split(BASE_DIR,LABELED_DIR,UNLABELED_DIR,TEST_DIR,label_split_ratio=label_split_ratio,test_split_ratio=test_split_ratio,shuffle=True)
+    num_images=len(os.listdir(UNLABELED_IMG_DIR))
 
-#model init    
-    model = AB_UNET(in_channels=3, out_channels=4,dropout=0,max_dropout=0.22).to(DEVICE)
+#model init  
+  
+    model = AB_UNET(in_channels=3, out_channels=4,dropout=dropout,max_dropout=max_dropout).to(DEVICE)
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     scaler = torch.cuda.amp.GradScaler()
-    
-    
 
     #torch.cuda.empty_cache()
     train_transform = A.Compose(
@@ -189,13 +189,18 @@ def Active_sampling(sample_size=10,acquistion_type=1):
             #A.HorizontalFlip(p=0.3),
             #A.VerticalFlip(p=0.1),
             #A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
+            #A.augmentations.transforms.Equalize(mode="cv",p=1),
             ToTensorV2()
         ],
     )
-    dice_array=[]
+
+# Loop 
+    dice_test_array=[]
+    dice_labeled_array=[]
     for step in range(int(num_images/sample_size)):
+
         print(f'step number {step} : ')
-        scheduler= torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,mode='min',patience=3,verbose=True)
+        #scheduler= torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,mode='min',patience=3,verbose=True)
         labeled_loader,unlabeled_loader,test_loader= get_loaders_active(
             LABELED_IMG_DIR,
             LABELED_MASK_DIR,
@@ -208,29 +213,94 @@ def Active_sampling(sample_size=10,acquistion_type=1):
             train_transform,
             NUM_WORKERS,
         )
-        
         for epoch in tqdm(range(NUM_EPOCHS)):
-            train_fn(labeled_loader, model, optimizer, loss_fn, scaler,scheduler)
+            train_fn(labeled_loader, model, optimizer, loss_fn, scaler,scheduler=None)
             if epoch==NUM_EPOCHS-1 : 
-                acc,dice=check_accuracy(test_loader,model,BATCH_SIZE, device=DEVICE)
-            #save_model_dict(model,step)
-        dice_array.append(dice)
-        score_dict=create_score_dict(model,unlabeled_loader,DEVICE,acquistion_type,4)
+                acc,dice_test=check_accuracy(test_loader,model,BATCH_SIZE, device=DEVICE)
+                acc,dice_labeled=check_accuracy(labeled_loader,model,BATCH_SIZE, device=DEVICE)
+        dice_test_array.append(dice_test)
+        dice_labeled_array.append(dice_labeled)
+
+
+        score_dict=create_score_dict(model,unlabeled_loader,DEVICE,acquistion_type,dropout_iteration=dropout_iteration)
         move_images_with_dict(BASE_DIR,LABELED_DIR,UNLABELED_DIR,score_dict,sample_size)
         
-    dice_stats=torch.tensor(dice_array).detach().cpu().numpy()
-    np.save(r'C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\stats\entropy_featuresinhalf.npy',np.array(dice_stats))
-    plt.plot(np.arange(1,int(num_images/sample_size)+1,1),dice_stats)
-    plt.show()
+    dice_stats_test=torch.tensor(dice_test_array).detach().cpu().numpy()
+    dice_stats_labeled=torch.tensor(dice_labeled_array).detach().cpu().numpy()
+    acq_fn=['entropy','BALD','KL-Divergence','JS-divergence']
+    path_test=os.path.join(exp_path,r"dice_stats",f"{acq_fn[acquistion_type-1]}_test.npy")
+    path_labeled=os.path.join(exp_path,r"dice_stats",f"{acq_fn[acquistion_type-1]}_labeled.npy")
+    np.save(path_test,np.array(dice_stats_test))
+    np.save(path_labeled,np.array(dice_stats_labeled))
 
+
+
+
+
+
+
+
+
+def Active_sampling_step(sample_size=4,acquistion_type=4,dropout_iteration=10,dropout=0,max_dropout=0.3):
+    LEARNING_RATE = 1e-3
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    #DEVICE="cpu"
+    BATCH_SIZE = 1
+    NUM_EPOCHS = 30
+    NUM_WORKERS = 2
+    PIN_MEMORY = False
+    LOAD_MODEL = False
+    LABELED_IMG_DIR = r".\DATA_AO_preprocessed\Labeled_pool\labeled_images"
+    LABELED_MASK_DIR = r".\DATA_AO_preprocessed\Labeled_pool\labeled_masks"
+    UNLABELED_IMG_DIR = r".\DATA_AO_preprocessed\Unlabeled_pool\unlabeled_images"
+    BASE_DIR=r".\DATA_AO_preprocessed"
+    LABELED_DIR=r"Labeled_pool"
+    UNLABELED_DIR=r"Unlabeled_pool"
+
+    train_transform = A.Compose(
+        [   #A.Rotate(limit=35, p=1.0),
+            #A.HorizontalFlip(p=0.3),
+            #A.VerticalFlip(p=0.1),
+            #A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
+            A.augmentations.transforms.Equalize(mode="cv",p=1),
+            ToTensorV2()
+        ],
+    )
+    
+    model = AB_UNET(in_channels=3, out_channels=4,dropout=dropout,max_dropout=max_dropout).to(DEVICE)
+    loss_fn = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    scaler = torch.cuda.amp.GradScaler()
+
+    #scheduler= torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,mode='min',patience=3,verbose=True)
+    labeled_loader,unlabeled_loader= get_loaders(
+        LABELED_IMG_DIR,
+        LABELED_MASK_DIR,
+        UNLABELED_IMG_DIR,
+        '',
+        BATCH_SIZE,
+        train_transform,
+        train_transform,
+        NUM_WORKERS,
+        )
+        
+    for epoch in tqdm(range(NUM_EPOCHS)):
+        train_fn(labeled_loader, model, optimizer, loss_fn, scaler,scheduler=None)
+        if epoch==NUM_EPOCHS-1 : 
+            acc,dice=check_accuracy(labeled_loader,model,BATCH_SIZE, device=DEVICE)
+    
+
+    score_dict=create_score_dict(model,unlabeled_loader,DEVICE,acquistion_type,dropout_iteration=dropout_iteration)
+    dict_iterator=iter(score_dict)
+    print(score_dict)
+    for i in range(sample_size) : 
+        im=next(dict_iterator)
+        print(im)
+        
 
 
 
 if __name__ == "__main__":
-    dice_stats1=np.load(r'C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\stats\random_featuresinhalf.npy')
-    dice_stats2=np.load(r'C:\Users\taha.DESKTOP-BQA3SEM\Desktop\Stage\AB_UNET\stats\entropy_featuresinhalf.npy')
-    fig,ax1 = plt.subplots()
-    ax2=ax1.twinx()
-    ax1.plot(np.arange(1,38,1),dice_stats1)
-    ax2.plot(np.arange(1,38,1),dice_stats2,color='r')
-    plt.show()
+    reset_DATA(os.path.join('.','DATA'))
+    #random_sampling(sample_size=4,dropout=0,max_dropout=0.3)
+    #Active_sampling(sample_size=2,acquistion_type=1,dropout_iteration=10,dropout=0,max_dropout=0.3)
