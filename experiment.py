@@ -20,7 +20,7 @@ import json
 
 
 def experiment(Config,exp_path=r""):
-
+    '''
     print('BEGINNING RANDOM SAMPLING :')
     reset_DATA(os.path.join('.','DATA'))
     random_sampling(
@@ -32,10 +32,10 @@ def experiment(Config,exp_path=r""):
     num_epochs=Config['model']['number of epochs'],
     batch_size=Config['model']['batch size'],
     exp_path=exp_path)
-
+    '''
     reset_DATA(os.path.join('.','DATA'))
     acq_fn=['entropy','BALD','KL-Divergence','JS-divergence']
-    for acq in [1,2,3,4]:
+    for acq in [3]:
         print(f"BEGINNING {acq_fn[acq-1]} SAMPLING :")
         Active_sampling(sample_size=Config['active_step']['sample size'],
         acquistion_type=acq,
@@ -49,14 +49,14 @@ def experiment(Config,exp_path=r""):
         exp_path=exp_path)
         reset_DATA(os.path.join('.','DATA'))
 
-
 if __name__ == "__main__":
     f = open("Config.json")
     Config = json.load(f)
 
     experiment_name=Config['experiment name']
-    os.mkdir(os.path.join('.','experiments',experiment_name))
-    shutil.copy(os.path.join('.','Config.json'),os.path.join('.','experiments',experiment_name))
+    #os.mkdir(os.path.join('.','experiments',experiment_name))
+    #os.mkdir(os.path.join('.','experiments',experiment_name,'dice_stats'))
+    #shutil.copy(os.path.join('.','Config.json'),os.path.join('.','experiments',experiment_name))
 
     experiment(Config=Config,exp_path=os.path.join('.','experiments',experiment_name))
 

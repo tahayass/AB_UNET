@@ -26,7 +26,7 @@ for image_name in images:
             else:
                 ICM_mask[i,j]=0
     im = Image.fromarray(ICM_mask).convert('L')
-    mask_path=os.path.join(r".\DATA_AO_preprocessed\labeled_pool\labeled_masks\GT_ICM",f"{image_name} ICM_Mask.bmp".replace(".png",""))
+    mask_path=os.path.join(r".\DATA_AO_preprocessed\labeled_pool\masks\GT_ICM",f"{image_name} ICM_Mask.bmp".replace(".png",""))
     im.save(mask_path)
     #TE
     for i in range(400):
@@ -36,7 +36,7 @@ for image_name in images:
             else:
                 TE_mask[i,j]=0
     im = Image.fromarray(TE_mask).convert('L')
-    mask_path=os.path.join(r".\DATA_AO_preprocessed\labeled_pool\labeled_masks\GT_TE",f"{image_name} TE_Mask.bmp".replace(".png",""))
+    mask_path=os.path.join(r".\DATA_AO_preprocessed\labeled_pool\masks\GT_TE",f"{image_name} TE_Mask.bmp".replace(".png",""))
     im.save(mask_path)
     #ZP
     for i in range(400):
@@ -46,7 +46,7 @@ for image_name in images:
             else:
                 ZP_mask[i,j]=0
     im = Image.fromarray(ZP_mask).convert('L')
-    mask_path=os.path.join(r".\DATA_AO_preprocessed\labeled_pool\labeled_masks\GT_ZP",f"{image_name} ZP_Mask.bmp".replace(".png",""))
+    mask_path=os.path.join(r".\DATA_AO_preprocessed\labeled_pool\masks\GT_ZP",f"{image_name} ZP_Mask.bmp".replace(".png",""))
     im.save(mask_path)
 
 

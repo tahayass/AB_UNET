@@ -15,6 +15,7 @@ import os
 import shutil
 import numpy as np
 import matplotlib.pyplot as plt
+from visualizations import visualise_masks
 
 
 
@@ -86,6 +87,7 @@ def random_sampling(sample_size=10,dropout=0,max_dropout=0.3,label_split_ratio=0
     UNLABELED_MASK_DIR = os.path.join('.','DATA','Unlabeled_pool','unlabeled_masks')
     TEST_IMG_DIR = os.path.join('.','DATA','Test','test_images')
     TEST_MASK_DIR = os.path.join('.','DATA','Test','test_masks')
+    test_dir=os.path.join('.','test_images')
 
 
 #intial split
@@ -112,7 +114,9 @@ def random_sampling(sample_size=10,dropout=0,max_dropout=0.3,label_split_ratio=0
             ToTensorV2()
         ],
     )
-    dice_array=[]
+    dice_test_array=[]
+    dice_labeled_array=[]
+    steps_to_reference=[0,1,2,3]
     for step in range(int(num_images/sample_size)):
         
         print(f'step number {step} : ')
@@ -133,16 +137,25 @@ def random_sampling(sample_size=10,dropout=0,max_dropout=0.3,label_split_ratio=0
             #scheduler= torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,mode='min',patience=3,verbose=True)
             train_fn(labeled_loader, model, optimizer, loss_fn, scaler,scheduler=None)
             if epoch==NUM_EPOCHS-1 : 
-                acc,dice=check_accuracy(test_loader,model,BATCH_SIZE, device=DEVICE)
-            #save_model_dict(model,step)
+                acc,dice_test=check_accuracy(test_loader,model,BATCH_SIZE, device=DEVICE)
+                acc,dice_labeled=check_accuracy(labeled_loader,model,BATCH_SIZE, device=DEVICE)
+        dice_test_array.append(dice_test)
+        dice_labeled_array.append(dice_labeled)
+        if step in steps_to_reference:
+            out_path=os.path.join(exp_path,f'reference images step {step} random AF')
+            os.mkdir(out_path)
+            visualise_masks(test_dir,out_path,model)
 
-        dice_array.append(dice)
+
         #move 10 images at random to labeled pool
         move_images(BASE_DIR,LABELED_DIR,UNLABELED_DIR,sample_size)
 
-    dice_stats=torch.tensor(dice_array).detach().cpu().numpy()
-    path=os.path.join(exp_path,r"dice_stats",f"random.npy")
-    np.save(path,np.array(dice_stats))
+    dice_stats_test=torch.tensor(dice_test_array).detach().cpu().numpy()
+    dice_stats_labeled=torch.tensor(dice_labeled_array).detach().cpu().numpy()
+    path_test=os.path.join(exp_path,r"dice_stats",f"random_test.npy")
+    path_labeled=os.path.join(exp_path,r"dice_stats",f"random_labeled.npy")
+    np.save(path_test,np.array(dice_stats_test))
+    np.save(path_labeled,np.array(dice_stats_labeled))
 
 
 
@@ -165,6 +178,7 @@ def Active_sampling(sample_size=10,acquistion_type=3,dropout_iteration=5,dropout
     UNLABELED_MASK_DIR = os.path.join('.','DATA','Unlabeled_pool','unlabeled_masks')
     TEST_IMG_DIR = os.path.join('.','DATA','Test','test_images')
     TEST_MASK_DIR = os.path.join('.','DATA','Test','test_masks')
+    test_dir=os.path.join('.','test_images')
 
 
 #intial split
@@ -197,6 +211,8 @@ def Active_sampling(sample_size=10,acquistion_type=3,dropout_iteration=5,dropout
 # Loop 
     dice_test_array=[]
     dice_labeled_array=[]
+    steps_to_reference=[0,1,2]
+    acq_fn=['entropy','BALD','KL-Divergence','JS-divergence']
     for step in range(int(num_images/sample_size)):
 
         print(f'step number {step} : ')
@@ -220,6 +236,10 @@ def Active_sampling(sample_size=10,acquistion_type=3,dropout_iteration=5,dropout
                 acc,dice_labeled=check_accuracy(labeled_loader,model,BATCH_SIZE, device=DEVICE)
         dice_test_array.append(dice_test)
         dice_labeled_array.append(dice_labeled)
+        if step in steps_to_reference:
+            out_path=os.path.join(exp_path,f'reference images step {step} {acq_fn[acquistion_type-1]} AF')
+            os.mkdir(out_path)
+            visualise_masks(test_dir,out_path,model)
 
 
         score_dict=create_score_dict(model,unlabeled_loader,DEVICE,acquistion_type,dropout_iteration=dropout_iteration)
@@ -227,7 +247,6 @@ def Active_sampling(sample_size=10,acquistion_type=3,dropout_iteration=5,dropout
         
     dice_stats_test=torch.tensor(dice_test_array).detach().cpu().numpy()
     dice_stats_labeled=torch.tensor(dice_labeled_array).detach().cpu().numpy()
-    acq_fn=['entropy','BALD','KL-Divergence','JS-divergence']
     path_test=os.path.join(exp_path,r"dice_stats",f"{acq_fn[acquistion_type-1]}_test.npy")
     path_labeled=os.path.join(exp_path,r"dice_stats",f"{acq_fn[acquistion_type-1]}_labeled.npy")
     np.save(path_test,np.array(dice_stats_test))
@@ -250,8 +269,8 @@ def Active_sampling_step(sample_size=4,acquistion_type=4,dropout_iteration=10,dr
     NUM_WORKERS = 2
     PIN_MEMORY = False
     LOAD_MODEL = False
-    LABELED_IMG_DIR = r".\DATA_AO_preprocessed\Labeled_pool\labeled_images"
-    LABELED_MASK_DIR = r".\DATA_AO_preprocessed\Labeled_pool\labeled_masks"
+    LABELED_IMG_DIR = r".\DATA_AO_preprocessed\Labeled_pool\images"
+    LABELED_MASK_DIR = r".\DATA_AO_preprocessed\Labeled_pool\masks"
     UNLABELED_IMG_DIR = r".\DATA_AO_preprocessed\Unlabeled_pool\unlabeled_images"
     BASE_DIR=r".\DATA_AO_preprocessed"
     LABELED_DIR=r"Labeled_pool"
@@ -301,6 +320,6 @@ def Active_sampling_step(sample_size=4,acquistion_type=4,dropout_iteration=10,dr
 
 
 if __name__ == "__main__":
-    reset_DATA(os.path.join('.','DATA'))
+    reset_DATA(os.path.join('.','DATA_AO_preprocessed\Labeled_pool'))
     #random_sampling(sample_size=4,dropout=0,max_dropout=0.3)
-    #Active_sampling(sample_size=2,acquistion_type=1,dropout_iteration=10,dropout=0,max_dropout=0.3)
+    Active_sampling_step(sample_size=4,acquistion_type=3,dropout_iteration=10,dropout=0,max_dropout=0.5)

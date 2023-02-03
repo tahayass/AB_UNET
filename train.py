@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 from utils import get_loaders,check_accuracy,train_val_split,check_accuracy_batch,reset_DATA
 
 
+#import wandb
+#wandb.login()
 
 ############## TENSORBOARD ########################
 import sys
@@ -28,16 +30,16 @@ LEARNING_RATE = 1e-3
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 #DEVICE="cpu"
 BATCH_SIZE = 2
-NUM_EPOCHS = 30
+NUM_EPOCHS = 20
 NUM_WORKERS = 2
 IMAGE_HEIGHT = 160  # 1280 originally
 IMAGE_WIDTH = 240  # 1918 originally
 PIN_MEMORY = False
 LOAD_MODEL = False
-TRAIN_IMG_DIR = r".\DATA\TRAIN\train_images"
-TRAIN_MASK_DIR = r".\DATA\TRAIN\train_masks"
-VAL_IMG_DIR = r".\DATA\VAL\val_images"
-VAL_MASK_DIR = r".\DATA\VAL\val_masks"
+TRAIN_IMG_DIR = r".\DATA_AO_preprocessed\labeled_pool\TRAIN\train_images"
+TRAIN_MASK_DIR = r".\DATA_AO_preprocessed\labeled_pool\TRAIN\train_masks"
+VAL_IMG_DIR = r".\DATA_AO_preprocessed\labeled_pool\VAL\val_images"
+VAL_MASK_DIR = r".\DATA_AO_preprocessed\labeled_pool\VAL\val_masks"
 
 def train_fn(loader,model, optimizer, loss_fn, scaler,scheduler):
     loop = tqdm(loader)
@@ -63,20 +65,21 @@ def train_fn(loader,model, optimizer, loss_fn, scaler,scheduler):
         loop.set_postfix({'loss':loss.item(),'accuracy':np.average(acc),'dice':np.average(di)})
     if scheduler:
         scheduler.step(loss)
+    #wandb.log({"loss": loss})
 
 
 def main():
 
-    BASE_DIR=r".\DATA"
+    BASE_DIR=r".\DATA_AO_preprocessed\labeled_pool"
     TRAIN_DIR=r"TRAIN"
     VAL_DIR=r"VAL"
-    reset_DATA(r".\DATA")
-    train_val_split(BASE_DIR,TRAIN_DIR,VAL_DIR,split_ratio=0.75,shuffle=True)
+    reset_DATA(r".\DATA_AO_preprocessed\labeled_pool")
+    train_val_split(BASE_DIR,TRAIN_DIR,VAL_DIR,split_ratio=0.8,shuffle=True)
 
 
     #torch.cuda.empty_cache()
     train_transform = A.Compose(
-        [   #A.Rotate(limit=35, p=1.0),
+        [   #A.Rotate(limit=35, p=0.3),
             #A.HorizontalFlip(p=0.3),
             #A.VerticalFlip(p=0.1),
             #A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
@@ -86,10 +89,12 @@ def main():
     )
 
 
-    model = AB_UNET(in_channels=3, out_channels=4,max_dropout=0,dropout=0).to(DEVICE)
+    model = AB_UNET(in_channels=3, out_channels=4,max_dropout=0.2,dropout=0).to(DEVICE)
+    #model.load_state_dict(torch.load('step1_stdict.pth'))
+    #model = torch.load('.\KL_div_model.pth').to(DEVICE)
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    scheduler= torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,mode='min',patience=3,verbose=True)
+    scheduler= torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,mode='min',patience=8,verbose=True)
     train_loader,val_loader= get_loaders(
         TRAIN_IMG_DIR,
         TRAIN_MASK_DIR,
@@ -107,27 +112,31 @@ def main():
     val_accuracy=[]
 
 
+
     for epoch in tqdm(range(NUM_EPOCHS)):
         train_fn(train_loader, model, optimizer, loss_fn, scaler, scheduler)
         print("\n")
         # check accuracy
         acc,dice=check_accuracy(train_loader, model,BATCH_SIZE, device=DEVICE)
+        #wandb.log({"dice": dice})
         dice_array.append(dice)
         accuracy_array.append(acc)
-        writer.add_scalar('training dice', dice, epoch+1)
+        #writer.add_scalar('training dice', dice, epoch+1)
         print("validation : ")
-        vacc,vdice=check_accuracy(val_loader, model,BATCH_SIZE, device=DEVICE)
-        val_dice.append(vdice)
-        val_accuracy.append(vacc)
-        writer.add_scalar('validation dice', vdice, epoch+1)
+        #vacc,vdice=check_accuracy(val_loader, model,BATCH_SIZE, device=DEVICE)
+        #val_dice.append(vdice)
+        #val_accuracy.append(vacc)
+        
 
     dice_stats=torch.tensor(dice_array).detach().cpu().numpy()
     accuracy_stats=torch.tensor(accuracy_array).detach().cpu().numpy()
-    vdice_stats=torch.tensor(val_dice).detach().cpu().numpy()
-    vacc_stats=torch.tensor(val_accuracy).detach().cpu().numpy()
-
-    plt.plot(np.arange(1,31,1),dice_stats,label='training dice',color='r')
-    plt.plot(np.arange(1,31,1),vdice_stats,label='validation dice',color='g')
+    #vdice_stats=torch.tensor(val_dice).detach().cpu().numpy()
+    #vacc_stats=torch.tensor(val_accuracy).detach().cpu().numpy()
+    FILE = "step2_stdict.pth"
+    torch.save(model.state_dict(), FILE)
+    '''
+    plt.plot(np.arange(1,21,1),dice_stats,label='training dice',color='r')
+    #plt.plot(np.arange(1,21,1),vdice_stats,label='validation dice',color='g')
     plt.ylim(ymin=0)
     plt.title("training and validation dice")
     plt.xlabel("epochs")
@@ -135,8 +144,8 @@ def main():
     plt.legend()
     plt.show()
 
-    plt.plot(np.arange(1,31,1),accuracy_stats,label='training accuracy',color='r')
-    plt.plot(np.arange(1,31,1),vacc_stats,label='validation accuracy',color='g')
+    plt.plot(np.arange(1,21,1),accuracy_stats,label='training accuracy',color='r')
+    #plt.plot(np.arange(1,21,1),vacc_stats,label='validation accuracy',color='g')
     plt.ylim(ymin=0)
     plt.title("training and validation accuracy")
     plt.xlabel("epochs")
@@ -147,12 +156,10 @@ def main():
 
         
     #save_predictions_as_imgs(train_loader, model, folder="saved_images/", device="cuda")
-    FILE = "model_30epochs_AO.pth"
-    torch.save(model, FILE)
+
     writer.close()
-    
 
-
+'''
 
 if __name__ == "__main__":
     main()

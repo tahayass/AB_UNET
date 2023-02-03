@@ -185,6 +185,29 @@ def save_predictions_as_imgs(loader, model, folder="saved_images/", device="cuda
 
     model.train()
 
+'''
+def check_accuracy_perclass(loader, model,batch_size, device="cuda"):
+    num_correct = 0
+    num_pixels = 0
+    dice_score = 0
+    model=model.float()
+    model.eval()
+
+    with torch.no_grad():
+        for x, y , _ in loader:
+            x = x.float().to(device)
+            y = y.float().to(device).unsqueeze(1)
+            preds = output_masks(model(x)).float().to(device)
+            for i in range(4):
+                num_correct += (preds == y).sum()
+                num_pixels += torch.numel(preds)*batch_size
+                dice_score += (2 * (preds * y).sum()) / ((preds + y).sum() + 1e-8)
+
+    print(f"accuracy :{num_correct/num_pixels*100:.2f}")
+    print(f"Dice score: {dice_score/len(loader)}")
+    model.train()
+    return num_correct/num_pixels*100,dice_score/len(loader)
+'''
 
 #self-explainatory
 def train_val_split(BASE_DIR,TRAIN_DIR,VAL_DIR,split_ratio=0.8,shuffle=False):
@@ -214,7 +237,7 @@ def train_val_split(BASE_DIR,TRAIN_DIR,VAL_DIR,split_ratio=0.8,shuffle=False):
         shutil.copy(im_path, target_path)
 
         for mask in os.listdir(os.path.join(BASE_DIR,'masks')):
-            mask_path=os.path.join(os.path.join(BASE_DIR,'masks',mask),im.replace(".BMP"," "+mask.replace("GT_","")+"_Mask.bmp"))
+            mask_path=os.path.join(os.path.join(BASE_DIR,'masks',mask),im.replace(".jpg"," "+mask.replace("GT_","")+"_Mask.bmp"))
             target_mask_path=os.path.join(BASE_DIR,TRAIN_DIR,'train_masks',mask)
             if os.path.exists(target_mask_path)==False:
                 os.mkdir(target_mask_path)
@@ -226,7 +249,7 @@ def train_val_split(BASE_DIR,TRAIN_DIR,VAL_DIR,split_ratio=0.8,shuffle=False):
         shutil.copy(im_path, target_path)    
 
         for mask in os.listdir(os.path.join(BASE_DIR,'masks')):
-            mask_path=os.path.join(os.path.join(BASE_DIR,'masks',mask),im.replace(".BMP"," "+mask.replace("GT_","")+"_Mask.bmp"))
+            mask_path=os.path.join(os.path.join(BASE_DIR,'masks',mask),im.replace(".jpg"," "+mask.replace("GT_","")+"_Mask.bmp"))
             target_mask_path=os.path.join(BASE_DIR,VAL_DIR,'val_masks',mask)
             if os.path.exists(target_mask_path)==False:
                 os.mkdir(target_mask_path)
@@ -406,7 +429,7 @@ def create_score_dict(model,loader,device,acquisition_type,dropout_iteration):
 
 def reset_DATA(data_path):
     dirs=os.listdir(data_path)
-    to_stay=[os.path.join(data_path,"images"),os.path.join(data_path,"masks")]
+    to_stay=[os.path.join(data_path,"images"),os.path.join(data_path,"masks"),os.path.join(data_path,"labeled_images"),os.path.join(data_path,"labeled_masks")]
     for dir in dirs:
         dir=os.path.join(data_path,dir)
         if dir not in to_stay:

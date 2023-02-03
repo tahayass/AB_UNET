@@ -12,7 +12,7 @@ def stack_mask(mask_dir,images,idx):
         cls_list.append(cls.replace("GT_",""))
     stack=[]
     for c in cls_list:
-        mask_path = os.path.join(os.path.join(mask_dir,"GT_"+c), images[idx].replace(".BMP", " "+c+"_Mask.bmp"))
+        mask_path = os.path.join(os.path.join(mask_dir,"GT_"+c), images[idx].replace(".jpg", " "+c+"_Mask.bmp"))
         label=Image.open(mask_path).convert("L").resize((200,200),resample=Image.NEAREST)
         label=np.asarray(label)/255
         stack.append(label)
